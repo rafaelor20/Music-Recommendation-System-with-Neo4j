@@ -1,0 +1,75 @@
+# Load environment variables from .env if present
+-include .env
+export
+
+NEO4J_USER ?= neo4j
+NEO4J_PASSWORD ?= music_graph_pass
+NEO4J_HTTP_PORT ?= 7474
+NEO4J_BOLT_PORT ?= 7687
+
+.PHONY: help up down logs shell constraints import queries reset
+
+help:
+	@echo "Available commands:"
+	@echo "  make up          - Start Neo4j container in the background"
+	@echo "  make down        - Stop and remove Neo4j container (preserves volumes)"
+	@echo "  make logs        - Follow Neo4j container logs"
+	@echo "  make shell       - Open an interactive cypher-shell session"
+	@echo "  make constraints - Execute cypher/00_constraints.cypher"
+	@echo "  make import      - Execute cypher/01_import_data.cypher"
+	@echo "  make queries     - Show instructions for running queries in Neo4j Browser / CLI"
+	@echo "  make reset       - [DESTRUCTIVE] Wipe persisted volumes, recreate container, and re-import data"
+
+up:
+	docker compose up -d
+
+down:
+	docker compose down
+
+logs:
+	docker compose logs -f neo4j
+
+shell:
+	docker compose exec neo4j cypher-shell -u "$(NEO4J_USER)" -p "$(NEO4J_PASSWORD)"
+
+constraints:
+	docker compose exec -T neo4j cypher-shell -u "$(NEO4J_USER)" -p "$(NEO4J_PASSWORD)" -f /cypher/00_constraints.cypher
+
+import:
+	docker compose exec -T neo4j cypher-shell -u "$(NEO4J_USER)" -p "$(NEO4J_PASSWORD)" -f /cypher/01_import_data.cypher
+
+queries:
+	@echo "================================================================================"
+	@echo "Neo4j Browser is available at: http://localhost:$(NEO4J_HTTP_PORT)"
+	@echo "Bolt URI:                      bolt://localhost:$(NEO4J_BOLT_PORT)"
+	@echo "Username:                      $(NEO4J_USER)"
+	@echo "================================================================================"
+	@echo ""
+	@echo "How to run the project queries in Neo4j Browser:"
+	@echo "  1. Open http://localhost:$(NEO4J_HTTP_PORT) in your web browser and sign in."
+	@echo "  2. For parameterized queries, first set the target user in the Browser prompt:"
+	@echo "       :param userId => 'u1'"
+	@echo "       :param otherUserId => 'u2'"
+	@echo "  3. Copy and paste queries from:"
+	@echo "       - cypher/02_basic_queries.cypher     (Basic exploration queries)"
+	@echo "       - cypher/03_business_queries.cypher  (Analytical & similarity queries)"
+	@echo "       - cypher/04_recommendations.cypher   (3 Recommendation strategies)"
+	@echo ""
+	@echo "To execute query files directly via CLI with parameters:"
+	@echo "  docker compose exec -T neo4j cypher-shell -u \"\$$NEO4J_USER\" -p \"\$$NEO4J_PASSWORD\" -f /cypher/02_basic_queries.cypher"
+	@echo "  docker compose exec -T neo4j cypher-shell -u \"\$$NEO4J_USER\" -p \"\$$NEO4J_PASSWORD\" -P \"userId => 'u1'\" -P \"otherUserId => 'u2'\" -f /cypher/03_business_queries.cypher"
+	@echo "  docker compose exec -T neo4j cypher-shell -u \"\$$NEO4J_USER\" -p \"\$$NEO4J_PASSWORD\" -P \"userId => 'u1'\" -f /cypher/04_recommendations.cypher"
+
+# DESTRUCTIVE COMMAND: Permanently removes persisted Neo4j database and log volumes,
+# recreates the environment from scratch, waits for readiness, and applies constraints + import.
+reset:
+	@echo "[WARNING] Destructive operation: removing Neo4j container and persisted volumes..."
+	docker compose down -v
+	docker compose up -d
+	@echo "Waiting for Neo4j to accept connections..."
+	@until docker compose exec -T neo4j cypher-shell -u "$(NEO4J_USER)" -p "$(NEO4J_PASSWORD)" "RETURN 1;" >/dev/null 2>&1; do \
+		sleep 2; \
+	done
+	$(MAKE) constraints
+	$(MAKE) import
+	@echo "Environment successfully reset and seeded!"

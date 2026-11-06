@@ -1,0 +1,26 @@
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Local Neo4j runtime / private data (if mounted locally)
+data/private/
+logs/
+backups/
+*.dump
+*.backup
+
+# Keeps public sample dataset tracked
+!data/sample/
+!data/sample/*.csv
+
+# OS and Editor temporary files
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.swo
+.vscode/
+.idea/
+__pycache__/
+*.pyc
